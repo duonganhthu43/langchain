@@ -111,7 +111,7 @@ DOZER_GENERATE_QUERY_RESPONSE = """
 DOZER_GENERATE_QUERY = """
 TABLES STRUCTURE:
 
-{raw_tables_yaml}
+{raw_tables_str}
 
 Your task is to generate a valid Clickhouse SQL query to retrieve data from the provided tables. Follow these steps carefully:
 
@@ -126,8 +126,11 @@ Your task is to generate a valid Clickhouse SQL query to retrieve data from the 
     - Aggregation can be done by using GROUP BY and aggregate functions.
     - Filtering can be done by using WHERE clause.
     - Sorting can be done by using ORDER BY clause. When sorting by a column that is not directly present in the queried table, make sure to join the relevant tables to access that column.
-    - DO NOT include ;
+    - DO NOT include ; at the end of the query.
 4. Generate the Query: Based on the analysis and construction steps, generate a valid Clickhouse SQL query that accurately responds to the user's question. Ensure that the query is well-structured, efficient, and provides the necessary data to answer the query effectively.
+
+{examples}
+
 
 QUESTION: {input}
 Response: SQL query as a string without any additional information.

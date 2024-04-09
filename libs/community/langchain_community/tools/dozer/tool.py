@@ -1,5 +1,6 @@
 """Tool for the Dozer Pulse"""
 
+import json
 from typing import Any, Dict, Optional, Type
 
 from langchain_core.callbacks import CallbackManagerForToolRun
@@ -9,7 +10,7 @@ from langchain_core.prompts.prompt import PromptTemplate
 from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
 from langchain_core.tools import BaseTool
 
-from langchain_community.utilities.dozer import DozerPulseWrapper, EndpointQueryParams
+from langchain_community.utilities.dozer import DozerPulseWrapper, EndpointQueryParams, Semantics
 
 from .prompt import (
     DOZER_GENERATE_QUERY,
@@ -26,10 +27,10 @@ class DozerRawQueryInput(BaseModel):
 
 
 class DozerRawQueryTool(BaseTool):
-    """Tool that executes a raw query using Dozer Pulse APIs."""
+    """Use this tool to execute a raw sql query to get data"""
 
     name: str = "dozer_raw_query"
-    description: str = "Input is a valid SQL query to be executed against the database."
+    description: str = "Use this tool to execute a raw sql query to get data. Input should be a valid SQL query."
     dozer: DozerPulseWrapper
     args_schema: Type[BaseModel] = DozerRawQueryInput
 
@@ -39,18 +40,30 @@ class DozerRawQueryTool(BaseTool):
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
         """Use the DozerRawQueryTool"""
+        
+        query = query.strip()
+        query_parsed = json.loads(query)
+        # check if it is a valid json
+        if isinstance(query_parsed, dict):
+            # check if it has a key 'query'
+            if 'query' in query_parsed:
+                query = query_parsed['query']
+        result = self.dozer.raw_query(query)
+        # return stringify result
+        return json.dumps(result)
         return self.dozer.raw_query(query)
 
 
 class DozerQueryEndpointInput(BaseModel):
-    params: EndpointQueryParams = Field(..., description="")
+    params: EndpointQueryParams | str = Field(..., description="")
 
 
 class DozerQueryEndpointTool(BaseTool):
-    """Tool that queries a Dozer Endpoint."""
+    """Use this tool to get data from an endpoint"""
 
     name: str = "dozer_query_endpoint"
     description: str = (
+        "Use this tool to get data from an endpoint"
         "Input to this tool is a map {{'endpoint_name': endpoint_name, 'params': 'parameters'}}"
         "endpoint_name is the available endpoint_name"
         "params are parameters defined on that endpoint"
@@ -60,11 +73,25 @@ class DozerQueryEndpointTool(BaseTool):
 
     def _run(
         self,
-        params: EndpointQueryParams,
+        params:  EndpointQueryParams | str  ,
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
         """Use the DozerQueryEndpointTool."""
-        return self.dozer.query_endpoint(params=params)
+        print("\n\n")
+        print("=== dozer_query_endpoint params ===", params)
+        print("\n\n")
+        # check type of params, if it is string, parse it to json and convert to EndpointQueryParams
+        if isinstance(params, str):
+            # Replace single quotes with double quotes
+            params = params.replace("'", "\"")
+            json_params = json.loads(params)
+            print("=== dozer_query_endpoint params after json parsing ===", json_params)
+            params = EndpointQueryParams(**json_params)
+        # check if params is EndpointQueryParams
+        if not isinstance(params, EndpointQueryParams):
+            raise ValueError("params should be of type EndpointQueryParams")
+        query_result = self.dozer.query_endpoint(params=params)
+        return json.dumps(query_result['rows'])
 
 
 class DozerSemanticsTool(BaseTool):
@@ -89,21 +116,26 @@ class DozerGenerateQueryInput(BaseModel):
 
 
 class DozerGenerateSqlQueryTool(BaseTool):
-    """Use an LLM to generate a valid SQL query"""
+    """Use this tool generate a valid SQL query based on user's request and provided semantics cube."""
 
     name: str = "dozer_generate_query"
     description: str = (
-        "Use this tool generate a valid SQL query based on user's request"
+        "Use this tool generate a valid SQL query based on user's request and provided semantics cube.",
+        "Input should be a request from user in plain text.",
     )
-    raw_tables_yaml: str
+    semantics: Semantics
     llm: BaseLanguageModel
     llm_chain: Any = Field(init=False)
     args_schema: Type[BaseModel] = DozerGenerateQueryInput
 
     @root_validator(pre=True)
     def initialize_llm_chain(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        if not values["raw_tables_yaml"]:
-            raise "raw_tables_yaml is expected"
+        if not values["semantics"]:
+            raise "semantics is expected"
+        semantics: Semantics = values["semantics"]
+        raw_tables_str = DozerGenerateSqlQueryTool.get_raw_tables_str(semantics)
+        examples_str = DozerGenerateSqlQueryTool.get_sql_example(semantics)
+        
         if "llm_chain" not in values:
             from langchain.chains.llm import LLMChain
             values["llm_chain"] = LLMChain(
@@ -113,22 +145,55 @@ class DozerGenerateSqlQueryTool(BaseTool):
                     input_variables=["input"],
                     partial_variables={
                         "format_response": DOZER_GENERATE_QUERY_RESPONSE,
-                        "raw_tables_yaml": values["raw_tables_yaml"],
+                        "raw_tables_str": raw_tables_str,
+                        "examples": examples_str,
                     },
                 ),
             )
         return values
-
+    
+    def get_raw_tables_str(semantics: Semantics) -> str:
+        """Return raw tables string."""
+        raw_cubes = semantics.filter_tables();
+        raw_table_cubes = raw_cubes.cubes
+        raw_tables_str = '';
+        for cube in raw_table_cubes:
+            table_description = cube['description'] if 'description' in cube else ''
+            raw_tables_str += format(f"Name: {cube['sql_table']}\n");
+            raw_tables_str += format(f"Description: {table_description}\n");
+            raw_tables_str += format(f"Columns: \n");
+            # get keys of dictionary
+            dimensions = cube['dimensions'];
+            keys = dimensions.keys();
+            for key in keys:
+                description = dimensions[key]['description'] if 'description' in dimensions[key] else ''
+                raw_tables_str += format(f"    {key} {dimensions[key]['sql_type']}    {description} \n");
+            raw_tables_str += format(f"==============================\n");
+        return raw_tables_str
+    
+    
+    def get_sql_example(semantics: Semantics) -> str:
+        """Return sql example."""
+        endpoints = semantics.filter_endpoints().cubes
+        sql_example = '';
+        for endpoint in endpoints:
+            if 'sql' in endpoint and 'description' in endpoint:
+                sql_example += format(f"QUESTION: {endpoint['description']}\n");
+                sql_example += format(f"Response: {endpoint['sql']}\n");
+                sql_example += format(f"\n");
+        return sql_example
+    
     def _run(
         self,
         input: str,
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
         """Use the LLM to check the query."""
-        return self.llm_chain.predict(
+        result = self.llm_chain.predict(
             input=input,
             callbacks=run_manager.get_child() if run_manager else None,
         )
+        return result
 
     async def _arun(
         self,
