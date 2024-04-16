@@ -10,7 +10,11 @@ from langchain_core.prompts.prompt import PromptTemplate
 from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
 from langchain_core.tools import BaseTool
 
-from langchain_community.utilities.dozer import DozerPulseWrapper, EndpointQueryParams, Semantics
+from langchain_community.utilities.dozer import (
+    DozerPulseWrapper,
+    EndpointQueryParams,
+    Semantics,
+)
 
 from .prompt import (
     DOZER_GENERATE_QUERY,
@@ -30,7 +34,9 @@ class DozerRawQueryTool(BaseTool):
     """Use this tool to execute a raw sql query to get data"""
 
     name: str = "dozer_raw_query"
-    description: str = "Use this tool to execute a raw sql query to get data. Input should be a valid SQL query."
+    description: str = """
+        Use this tool to execute a raw sql query to get data.
+        Input should be a valid SQL query."""
     dozer: DozerPulseWrapper
     args_schema: Type[BaseModel] = DozerRawQueryInput
 
@@ -40,14 +46,15 @@ class DozerRawQueryTool(BaseTool):
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
         """Use the DozerRawQueryTool"""
-        
+
         query = query.strip()
-        query_parsed = json.loads(query)
-        # check if it is a valid json
-        if isinstance(query_parsed, dict):
-            # check if it has a key 'query'
-            if 'query' in query_parsed:
-                query = query_parsed['query']
+        try:
+            query_parsed = json.loads(query.replace("\n", " "))
+            if isinstance(query_parsed, dict):
+                if "query" in query_parsed:
+                    query = query_parsed["query"]
+        except:
+            pass
         result = self.dozer.raw_query(query)
         # return stringify result
         return json.dumps(result)
@@ -73,25 +80,21 @@ class DozerQueryEndpointTool(BaseTool):
 
     def _run(
         self,
-        params:  EndpointQueryParams | str  ,
+        params: EndpointQueryParams | str,
         run_manager: Optional[CallbackManagerForToolRun] = None,
     ) -> str:
         """Use the DozerQueryEndpointTool."""
-        print("\n\n")
-        print("=== dozer_query_endpoint params ===", params)
-        print("\n\n")
         # check type of params, if it is string, parse it to json and convert to EndpointQueryParams
         if isinstance(params, str):
             # Replace single quotes with double quotes
-            params = params.replace("'", "\"")
+            params = params.replace("'", '"')
             json_params = json.loads(params)
-            print("=== dozer_query_endpoint params after json parsing ===", json_params)
             params = EndpointQueryParams(**json_params)
         # check if params is EndpointQueryParams
         if not isinstance(params, EndpointQueryParams):
             raise ValueError("params should be of type EndpointQueryParams")
         query_result = self.dozer.query_endpoint(params=params)
-        return json.dumps(query_result['rows'])
+        return json.dumps(query_result["rows"])
 
 
 class DozerSemanticsTool(BaseTool):
@@ -135,9 +138,10 @@ class DozerGenerateSqlQueryTool(BaseTool):
         semantics: Semantics = values["semantics"]
         raw_tables_str = DozerGenerateSqlQueryTool.get_raw_tables_str(semantics)
         examples_str = DozerGenerateSqlQueryTool.get_sql_example(semantics)
-        
+
         if "llm_chain" not in values:
             from langchain.chains.llm import LLMChain
+
             values["llm_chain"] = LLMChain(
                 llm=values.get("llm"),
                 prompt=PromptTemplate(
@@ -151,38 +155,43 @@ class DozerGenerateSqlQueryTool(BaseTool):
                 ),
             )
         return values
-    
+
     def get_raw_tables_str(semantics: Semantics) -> str:
         """Return raw tables string."""
-        raw_cubes = semantics.filter_tables();
+        raw_cubes = semantics.filter_tables()
         raw_table_cubes = raw_cubes.cubes
-        raw_tables_str = '';
+        raw_tables_str = ""
         for cube in raw_table_cubes:
-            table_description = cube['description'] if 'description' in cube else ''
-            raw_tables_str += format(f"Name: {cube['sql_table']}\n");
-            raw_tables_str += format(f"Description: {table_description}\n");
-            raw_tables_str += format(f"Columns: \n");
+            table_description = cube["description"] if "description" in cube else ""
+            raw_tables_str += format(f"Name: {cube['sql_table']}\n")
+            raw_tables_str += format(f"Description: {table_description}\n")
+            raw_tables_str += format("Columns: \n")
             # get keys of dictionary
-            dimensions = cube['dimensions'];
-            keys = dimensions.keys();
+            dimensions = cube["dimensions"]
+            keys = dimensions.keys()
             for key in keys:
-                description = dimensions[key]['description'] if 'description' in dimensions[key] else ''
-                raw_tables_str += format(f"    {key} {dimensions[key]['sql_type']}    {description} \n");
-            raw_tables_str += format(f"==============================\n");
+                description = (
+                    dimensions[key]["description"]
+                    if "description" in dimensions[key]
+                    else ""
+                )
+                raw_tables_str += format(
+                    f"    {key} {dimensions[key]['sql_type']}    {description} \n"
+                )
+            raw_tables_str += format("==============================\n")
         return raw_tables_str
-    
-    
+
     def get_sql_example(semantics: Semantics) -> str:
         """Return sql example."""
         endpoints = semantics.filter_endpoints().cubes
-        sql_example = '';
+        sql_example = ""
         for endpoint in endpoints:
-            if 'sql' in endpoint and 'description' in endpoint:
-                sql_example += format(f"QUESTION: {endpoint['description']}\n");
-                sql_example += format(f"Response: {endpoint['sql']}\n");
-                sql_example += format(f"\n");
+            if "sql" in endpoint and "description" in endpoint:
+                sql_example += format(f"QUESTION: {endpoint['description']}\n")
+                sql_example += format(f"Response: {endpoint['sql']}\n")
+                sql_example += format("\n")
         return sql_example
-    
+
     def _run(
         self,
         input: str,

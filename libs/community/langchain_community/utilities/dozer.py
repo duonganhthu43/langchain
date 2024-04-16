@@ -1,11 +1,8 @@
-import json
 from dataclasses import dataclass
 from typing import Dict, List, Optional
 
 import requests
-import yaml
-from langchain_core.documents import Document
-from langchain_core.pydantic_v1 import BaseModel, Field, SecretStr, root_validator
+from langchain_core.pydantic_v1 import BaseModel, SecretStr, root_validator
 from langchain_core.utils import convert_to_secret_str, get_from_dict_or_env
 
 
@@ -20,11 +17,12 @@ class Dimension:
     name: str
     sql_type: str
     description: Optional[str] = None
+
     def to_dict(self):
         return {
-            'sql_type': self.sql_type,
-            'description': self.description,
-            'name': self.name
+            "sql_type": self.sql_type,
+            "description": self.description,
+            "name": self.name,
         }
 
 
@@ -46,31 +44,34 @@ class Cube:
     extends: Optional[List[str]] = None
     sql: Optional[str] = None
     params: Optional[List[Parameter]] = None
+
     def to_dict(self):
         return {
-            'id': self.id,
-            'description': self.description,
-            'dimensions': {key: value for key, value in self.dimensions.items()},
-            'name': self.name,
-            'sql_table': self.sql_table,
-            'extends': self.extends,
-            'sql': self.sql,
-            'params': self.params
+            "id": self.id,
+            "description": self.description,
+            "dimensions": {key: value for key, value in self.dimensions.items()},
+            "name": self.name,
+            "sql_table": self.sql_table,
+            "extends": self.extends,
+            "sql": self.sql,
+            "params": self.params,
         }
+
 
 # Custom representer for Cube objects
 def cube_representer(dumper, data):
     cube_dict = {
-        'id': data.id,
-        'description': data.description,
-        'dimensions': {key: value for key, value in data.dimensions.items()},
-        'name': data.name,
-        'sql_table': data.sql_table,
-        'extends': data.extends,
-        'sql': data.sql,
-        'params': data.params
+        "id": data.id,
+        "description": data.description,
+        "dimensions": {key: value for key, value in data.dimensions.items()},
+        "name": data.name,
+        "sql_table": data.sql_table,
+        "extends": data.extends,
+        "sql": data.sql,
+        "params": data.params,
     }
-    return dumper.represent_mapping('tag:yaml.org,2002:map', cube_dict)
+    return dumper.represent_mapping("tag:yaml.org,2002:map", cube_dict)
+
 
 @dataclass
 class Semantics:
@@ -78,19 +79,21 @@ class Semantics:
 
     def filter_endpoints(self) -> "Semantics":
         """Filters cubes where the sql attribute is not None."""
-        filtered_cubes = [cube for cube in self.cubes if getattr(cube, "sql", None) is not None]
+        filtered_cubes = [
+            cube for cube in self.cubes if getattr(cube, "sql", None) is not None
+        ]
         return Semantics(cubes=filtered_cubes)
 
     def filter_tables(self) -> "Semantics":
         """Filters cubes where the sql attribute is None."""
-        filtered_cubes = [cube for cube in self.cubes if not "sql" in cube]
+        filtered_cubes = [cube for cube in self.cubes if "sql" not in cube]
         return Semantics(cubes=filtered_cubes)
+
     def to_dict(self):
         # convert each cube to dict
         dict_cube = [cube.to_dict() for cube in self.cubes]
-        return {
-            'cubes': dict_cube
-        }
+        return {"cubes": dict_cube}
+
 
 class DozerPulseWrapper(BaseModel):
     """Wrapper around Dozer Pulse APIs.
@@ -161,7 +164,6 @@ class DozerPulseWrapper(BaseModel):
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            print(e.response.content)
             return {"error": str(e.response.content)}
 
     def raw_query(self, raw_sql: str) -> dict:
@@ -176,12 +178,11 @@ class DozerPulseWrapper(BaseModel):
         """
         headers = self._headers()
         url = f"{self.base_url}/apps/{self.application_id}/execute"
-        try :
+        try:
             response = requests.post(url, headers=headers, json={"query": raw_sql})
             response.raise_for_status()
             return response.json()
         except Exception as e:
-            print(e.response.content)
             return {"error": str(e.response.content)}
 
     def _headers(self) -> dict:

@@ -14,16 +14,14 @@ from typing import (
     cast,
 )
 
-from langchain_openai import ChatOpenAI
-
 from langchain_core.messages import AIMessage, SystemMessage
-from langchain_core.output_parsers.openai_tools import JsonOutputToolsParser
 from langchain_core.prompts import BasePromptTemplate, PromptTemplate
 from langchain_core.prompts.chat import (
     ChatPromptTemplate,
     HumanMessagePromptTemplate,
     MessagesPlaceholder,
 )
+from langchain_openai import ChatOpenAI
 
 from langchain_community.agent_toolkits.dozer.prompt import (
     DOZER_FORMAT_INSTRUCTIONS,
@@ -32,7 +30,6 @@ from langchain_community.agent_toolkits.dozer.prompt import (
     DOZER_QUERY_ENDPOINT_REQUEST_EXAMPLE,
     DOZER_QUERY_ENDPOINT_RESPONSE_EXAMPLE,
     DOZER_RAW_QUERY_REQUEST_EXAMPLE,
-    DOZER_SUFFIX,
 )
 from langchain_community.agent_toolkits.dozer.toolkit import DozerPulseToolkit
 from langchain_community.tools.dozer.tool import DozerSemanticsTool
@@ -47,19 +44,28 @@ if TYPE_CHECKING:
     from langchain_community.utilities.dozer import DozerPulseWrapper
 
 
-
-def create_dozer_agent_simple(api_key: Optional[str] = None, application_id: Optional[int] = None, verbose:Optional[bool] = False, llm:Optional[BaseLanguageModel] = None):
+def create_dozer_agent_simple(
+    api_key: Optional[str] = None,
+    application_id: Optional[int] = None,
+    verbose: Optional[bool] = False,
+    llm: Optional[BaseLanguageModel] = None,
+):
     # if api_key is None or application_id is None show error
-    print("==== api_key", api_key)
     if api_key is None or application_id is None:
         warnings.warn("Please provide api_key and application_id to create dozer agent")
         return None
     dozer = DozerPulseWrapper(api_key=api_key, application_id=application_id)
     llm = llm or ChatOpenAI(temperature=0, model_name="gpt-3.5-turbo-0125")
     toolkit = DozerPulseToolkit(dozer=dozer, llm=llm)
-    
-    return create_dozer_agent(llm=llm, toolkit=toolkit, verbose=verbose, agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION)
-    
+
+    return create_dozer_agent(
+        llm=llm,
+        toolkit=toolkit,
+        verbose=verbose,
+        agent_type=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+    )
+
+
 def create_dozer_agent(
     llm: BaseLanguageModel,
     toolkit: Optional[DozerPulseToolkit] = None,
@@ -94,8 +100,6 @@ def create_dozer_agent(
     )
     from langchain.agents.agent_types import AgentType
 
-
-
     if toolkit is None and dozer is None:
         raise ValueError(
             "Must provide exactly one of 'toolkit' or 'dozer'. Received neither."
@@ -114,7 +118,13 @@ def create_dozer_agent(
     semantics_str = toolkit.fetch_endpoints()
     if prompt is None:
         prefix = prefix or DOZER_PREFIX
-        prefix = prefix.format(top_k=top_k, semantics=semantics_str, example_query_endpoint_request=DOZER_QUERY_ENDPOINT_REQUEST_EXAMPLE, example_query_endpoint_response=DOZER_QUERY_ENDPOINT_RESPONSE_EXAMPLE, example_raw_query_request=DOZER_RAW_QUERY_REQUEST_EXAMPLE)
+        prefix = prefix.format(
+            top_k=top_k,
+            semantics=semantics_str,
+            example_query_endpoint_request=DOZER_QUERY_ENDPOINT_REQUEST_EXAMPLE,
+            example_query_endpoint_response=DOZER_QUERY_ENDPOINT_RESPONSE_EXAMPLE,
+            example_raw_query_request=DOZER_RAW_QUERY_REQUEST_EXAMPLE,
+        )
     else:
         if "top_k" in prompt.input_variables:
             prompt = prompt.partial(top_k=str(top_k))
@@ -145,14 +155,19 @@ def create_dozer_agent(
                 ]
             )
             prompt = PromptTemplate.from_template(template)
-            prompt = prompt.partial(example_query_endpoint_request=DOZER_QUERY_ENDPOINT_REQUEST_EXAMPLE)
-            prompt = prompt.partial(example_query_endpoint_response=DOZER_QUERY_ENDPOINT_RESPONSE_EXAMPLE)
-            prompt = prompt.partial(example_raw_query_request=DOZER_RAW_QUERY_REQUEST_EXAMPLE)
+            prompt = prompt.partial(
+                example_query_endpoint_request=DOZER_QUERY_ENDPOINT_REQUEST_EXAMPLE
+            )
+            prompt = prompt.partial(
+                example_query_endpoint_response=DOZER_QUERY_ENDPOINT_RESPONSE_EXAMPLE
+            )
+            prompt = prompt.partial(
+                example_raw_query_request=DOZER_RAW_QUERY_REQUEST_EXAMPLE
+            )
             prompt = prompt.partial(top_k=top_k)
             if "semantics" in prompt.input_variables:
                 prompt = prompt.partial(semantics=semantics_str)
-            
-            
+
         agent = RunnableAgent(
             runnable=create_react_agent(llm, tools, prompt),
             input_keys_arg=["input"],
@@ -162,9 +177,15 @@ def create_dozer_agent(
 
     elif agent_type == "openai-tools":
         if prompt is None:
-            prefix = prefix.format(example_query_endpoint_request=DOZER_QUERY_ENDPOINT_REQUEST_EXAMPLE)
-            prefix = prefix.format(example_query_endpoint_response=DOZER_QUERY_ENDPOINT_RESPONSE_EXAMPLE)
-            prefix = prefix.format(example_raw_query_request=DOZER_RAW_QUERY_REQUEST_EXAMPLE)
+            prefix = prefix.format(
+                example_query_endpoint_request=DOZER_QUERY_ENDPOINT_REQUEST_EXAMPLE
+            )
+            prefix = prefix.format(
+                example_query_endpoint_response=DOZER_QUERY_ENDPOINT_RESPONSE_EXAMPLE
+            )
+            prefix = prefix.format(
+                example_raw_query_request=DOZER_RAW_QUERY_REQUEST_EXAMPLE
+            )
             messages = [
                 SystemMessage(content=cast(str, prefix)),
                 HumanMessagePromptTemplate.from_template("{input}"),
@@ -196,5 +217,4 @@ def create_dozer_agent(
         early_stopping_method=early_stopping_method,
         handle_parsing_errors=True,
         **(agent_executor_kwargs or {}),
-        
     )

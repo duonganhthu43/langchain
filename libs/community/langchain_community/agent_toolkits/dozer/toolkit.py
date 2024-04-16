@@ -11,9 +11,13 @@ from langchain_community.tools.dozer.tool import (
     DozerGenerateSqlQueryTool,
     DozerQueryEndpointTool,
     DozerRawQueryTool,
-    DozerSemanticsTool,
 )
-from langchain_community.utilities.dozer import Cube, Dimension, DozerPulseWrapper, Semantics
+from langchain_community.utilities.dozer import (
+    Cube,
+    Dimension,
+    DozerPulseWrapper,
+    Semantics,
+)
 
 
 class DozerPulseToolkit(BaseToolkit):
@@ -41,7 +45,7 @@ class DozerPulseToolkit(BaseToolkit):
     def get_tools(self) -> List[BaseTool]:
         """Get the tools in the toolkit."""
         generate_tool = DozerGenerateSqlQueryTool(
-            dozer=self.dozer, llm=self.llm, semantics=self.semantics
+            llm=self.llm, semantics=self.semantics
         )
         query_endpoint_tool = DozerQueryEndpointTool(dozer=self.dozer)
         raw_query_tool = DozerRawQueryTool(dozer=self.dozer)
@@ -53,18 +57,23 @@ class DozerPulseToolkit(BaseToolkit):
         semantics = self.semantics.filter_endpoints()
         yaml.add_representer(Semantics, DozerPulseToolkit.dict_representer)
         yaml.add_representer(Cube, DozerPulseToolkit.dict_representer)
-        yaml.add_representer(Dimension, DozerPulseToolkit.dict_representer)     
+        yaml.add_representer(Dimension, DozerPulseToolkit.dict_representer)
         return yaml.dump(semantics)
 
     def fetch_tables(self) -> str:
         """Return semantics for raw_tables."""
         semantics = self.semantics.filter_tables()
         yaml.add_representer(Cube, DozerPulseToolkit.dict_representer)
-        yaml.add_representer(Dimension, DozerPulseToolkit.dict_representer)     
+        yaml.add_representer(Dimension, DozerPulseToolkit.dict_representer)
 
         return yaml.dump(semantics.cubes)
-    
+
+    def semantics_yaml_str(semantics: Semantics) -> str:
+        yaml.add_representer(Semantics, DozerPulseToolkit.dict_representer)
+        # yaml.add_representer(Cube, DozerPulseToolkit.dict_representer)
+        yaml.add_representer(Dimension, DozerPulseToolkit.dict_representer)
+        return yaml.dump(semantics)
+
     def dict_representer(dumper, data):
         cube_dict = data.to_dict()
-        return dumper.represent_mapping('tag:yaml.org,2002:map', cube_dict)
-
+        return dumper.represent_mapping("tag:yaml.org,2002:map", cube_dict)

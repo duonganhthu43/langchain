@@ -113,7 +113,8 @@ TABLES STRUCTURE:
 
 {raw_tables_str}
 
-Your task is to generate a valid Clickhouse SQL query to retrieve data from the provided tables. Follow these steps carefully:
+Your task is to generate a valid Clickhouse SQL query to retrieve data from the provided tables.
+Follow these steps carefully:
 
 1. Understand the Schema: Examine the schema details for each table. Identify the columns available in each table and their relationships, particularly focusing on common columns that can be used for JOIN operations.
 2. Analyze the Query: Review the user's question and determine the data requirements. Identify the tables that need to be queried and the columns necessary to answer the question effectively.

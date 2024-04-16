@@ -1,7 +1,6 @@
 # flake8: noqa
 
 
-
 DOZER_QUERY_ENDPOINT_REQUEST_EXAMPLE = """
         {
           "endpoint_name": <name of the cube>
@@ -77,7 +76,6 @@ There are 2 primary methods to query the cube database - choosing the right meth
 Consider the best approach that suits the question requirements and the available cube structure to retrieve the desired data effectively.
 
 """
-
 
 
 DOZER_SUFFIX = """Begin!
